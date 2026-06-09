@@ -61,9 +61,12 @@ async def check_login(page) -> bool:
     return await page.evaluate("""
         () => {
             const text = document.body.innerText || '';
-            return text.includes('扫码') || text.includes('登录') && text.includes('二维码');
+            return text.includes('扫码') || (text.includes('登录') && text.includes('二维码'));
         }
     """)
+
+
+async def dom_click(page, text: str) -> bool:
     """用JavaScript直接在DOM上触发click，完全不依赖viewport位置。"""
     return await page.evaluate(f"""
         () => {{
@@ -147,26 +150,56 @@ async def xhs_get_note(url: str) -> str:
     """获取一篇小红书笔记的标题、正文、作者、点赞数和前5条评论。"""
     page = await get_page()
     await page.goto(url)
-    await page.wait_for_load_state("networkidle", timeout=12000)
-    await page.wait_for_timeout(1500)
+    await page.wait_for_load_state("networkidle", timeout=15000)
+    await page.wait_for_timeout(3000)
 
     if await check_login(page):
         return "页面要求登录，请调用 xhs_login 重新登录，登完调 xhs_save_login 保存。"
 
+    try:
+        await page.wait_for_selector(
+            '#detail-title, [class*="note-content"], [class*="noteContent"], [class*="detail-content"]',
+            timeout=8000
+        )
+    except Exception:
+        pass
+
     data = await page.evaluate("""() => {
         const title = document.querySelector('#detail-title')?.innerText?.trim()
-            || document.querySelector('[class*="title"]')?.innerText?.trim() || '';
-        const desc = document.querySelector('#detail-desc')?.innerText?.trim()
-            || document.querySelector('[class*="desc"]')?.innerText?.trim() || '';
-        const author = document.querySelector('.author-wrapper .username, [class*="username"]')?.innerText?.trim() || '';
-        const likes = document.querySelector('.like-wrapper .count, [class*="like-count"]')?.innerText?.trim() || '';
-        const collects = document.querySelector('.collect-wrapper .count, [class*="collect-count"]')?.innerText?.trim() || '';
-        const comments = [...document.querySelectorAll('.comment-item')].slice(0, 5).map(c => ({
-            user: c.querySelector('[class*="name"]')?.innerText?.trim() || '',
-            text: c.querySelector('[class*="content"]')?.innerText?.trim() || ''
-        }));
+            || document.querySelector('h1')?.innerText?.trim()
+            || [...document.querySelectorAll('[class*="title"]')]
+                .find(el => el.innerText?.trim() && el.tagName !== 'SCRIPT')?.innerText?.trim() || '';
+
+        const desc = document.querySelector('#detail-desc .note-text')?.innerText?.trim()
+            || document.querySelector('#detail-desc')?.innerText?.trim()
+            || document.querySelector('[class*="noteContent"], [class*="note-content"]')?.innerText?.trim()
+            || [...document.querySelectorAll('[class*="desc"], [class*="content"]')]
+                .find(el => (el.innerText?.trim()?.length || 0) > 10 && el.tagName !== 'SCRIPT')
+                ?.innerText?.trim() || '';
+
+        const author = document.querySelector('.author-wrapper .username')?.innerText?.trim()
+            || document.querySelector('.author-wrapper [class*="name"]')?.innerText?.trim()
+            || document.querySelector('[class*="author"] [class*="name"]')?.innerText?.trim()
+            || document.querySelector('[class*="username"]')?.innerText?.trim() || '';
+
+        const likes = document.querySelector('.like-wrapper .count')?.innerText?.trim()
+            || document.querySelector('[class*="like"] [class*="count"]')?.innerText?.trim() || '';
+
+        const collects = document.querySelector('.collect-wrapper .count')?.innerText?.trim()
+            || document.querySelector('[class*="collect"] [class*="count"]')?.innerText?.trim() || '';
+
+        const comments = [...document.querySelectorAll('.comment-item, [class*="commentItem"], [class*="comment-item"]')]
+            .slice(0, 5).map(c => ({
+                user: c.querySelector('[class*="name"]')?.innerText?.trim() || '',
+                text: c.querySelector('[class*="content"], [class*="text"]')?.innerText?.trim() || ''
+            }));
+
         return { title, desc, author, likes, collects, comments };
     }""")
+
+    if not data.get('title') and not data.get('desc'):
+        page_text = await page.evaluate("() => document.body.innerText?.slice(0, 800) || ''")
+        return f"无法解析帖子结构，页面原始内容（前800字）：\n{page_text}"
 
     lines = [
         f"标题：{data['title'] or '(无标题)'}",
