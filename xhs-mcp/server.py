@@ -9,7 +9,7 @@ from pathlib import Path
 from mcp.server.fastmcp import FastMCP
 from playwright.async_api import async_playwright
 
-COOKIES_FILE = Path.home() / ".xhs_cookies.json"
+COOKIES_FILE = Path(__file__).parent / "xhs_cookies.json"
 XHS_URL = "https://www.xiaohongshu.com"
 
 mcp = FastMCP("小红书")
