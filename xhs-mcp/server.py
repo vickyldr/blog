@@ -56,7 +56,14 @@ async def get_page():
     return _page
 
 
-async def dom_click(page, text: str) -> bool:
+async def check_login(page) -> bool:
+    """检查当前页面是否有登录/扫码弹窗。"""
+    return await page.evaluate("""
+        () => {
+            const text = document.body.innerText || '';
+            return text.includes('扫码') || text.includes('登录') && text.includes('二维码');
+        }
+    """)
     """用JavaScript直接在DOM上触发click，完全不依赖viewport位置。"""
     return await page.evaluate(f"""
         () => {{
@@ -142,6 +149,9 @@ async def xhs_get_note(url: str) -> str:
     await page.goto(url)
     await page.wait_for_load_state("networkidle", timeout=12000)
     await page.wait_for_timeout(1500)
+
+    if await check_login(page):
+        return "页面要求登录，请调用 xhs_login 重新登录，登完调 xhs_save_login 保存。"
 
     data = await page.evaluate("""() => {
         const title = document.querySelector('#detail-title')?.innerText?.trim()
