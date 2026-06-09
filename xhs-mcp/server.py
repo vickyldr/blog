@@ -270,7 +270,7 @@ async def xhs_post(title: str, content: str, style: str = "基础", tags: str = 
     tab = page.get_by_text("上传图文", exact=True)
     if await tab.count() > 0:
         await tab.first.scroll_into_view_if_needed()
-        await tab.first.click()
+        await tab.first.click(force=True)
         await page.wait_for_timeout(1500)
 
     # 2. 点"文字配图"按钮
@@ -278,7 +278,7 @@ async def xhs_post(title: str, content: str, style: str = "基础", tags: str = 
     if await text_img_btn.count() == 0:
         return '找不到文字配图按钮，可能还没登录创作者平台（先调用 xhs_login_creator）。'
     await text_img_btn.first.scroll_into_view_if_needed()
-    await text_img_btn.first.click()
+    await text_img_btn.first.click(force=True)
     await page.wait_for_timeout(1500)
 
     # 2. 填写文字内容
@@ -296,14 +296,14 @@ async def xhs_post(title: str, content: str, style: str = "基础", tags: str = 
     if await gen_btn.count() == 0:
         return '找不到生成图片按钮。'
     await gen_btn.first.scroll_into_view_if_needed()
-    await gen_btn.first.click()
+    await gen_btn.first.click(force=True)
     await page.wait_for_timeout(5000)
 
     # 4. 选择卡片样式
     style_card = page.get_by_text(style, exact=True)
     if await style_card.count() > 0:
         await style_card.first.scroll_into_view_if_needed()
-        await style_card.first.click()
+        await style_card.first.click(force=True)
         await page.wait_for_timeout(800)
 
     # 5. 点"下一步"
@@ -311,7 +311,7 @@ async def xhs_post(title: str, content: str, style: str = "基础", tags: str = 
     if await next_btn.count() == 0:
         return '找不到下一步按钮，图片可能还没生成完，请在浏览器里手动操作。'
     await next_btn.first.scroll_into_view_if_needed()
-    await next_btn.first.click()
+    await next_btn.first.click(force=True)
     await page.wait_for_timeout(2000)
 
     # 6. 填标题
@@ -341,7 +341,8 @@ async def xhs_post(title: str, content: str, style: str = "基础", tags: str = 
     # 8. 点"发布"
     publish_btn = page.get_by_text("发布", exact=True)
     if await publish_btn.count() > 0:
-        await publish_btn.first.click()
+        await publish_btn.first.scroll_into_view_if_needed()
+        await publish_btn.first.click(force=True)
         await page.wait_for_timeout(2000)
         await save_cookies()
         return f"发布成功！标题：{title}，样式：{style}" + (f"，标签：{tags}" if tags else "")
