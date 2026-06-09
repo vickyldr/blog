@@ -252,7 +252,7 @@ async def xhs_post(title: str, content: str, style: str = "基础", tags: str = 
     # 1. 点"文字配图"按钮
     text_img_btn = await page.query_selector("button:has-text('文字配图'), span:has-text('文字配图')")
     if not text_img_btn:
-        return "找不到"文字配图"按钮，可能还没登录创作者平台（先调用 xhs_login_creator）。"
+        return '找不到文字配图按钮，可能还没登录创作者平台（先调用 xhs_login_creator）。'
     await text_img_btn.click()
     await page.wait_for_timeout(1500)
 
@@ -269,7 +269,7 @@ async def xhs_post(title: str, content: str, style: str = "基础", tags: str = 
     # 3. 点"生成图片"
     gen_btn = await page.query_selector("button:has-text('生成图片')")
     if not gen_btn:
-        return "找不到"生成图片"按钮。"
+        return '找不到生成图片按钮。'
     await gen_btn.click()
     await page.wait_for_timeout(5000)
 
@@ -283,7 +283,7 @@ async def xhs_post(title: str, content: str, style: str = "基础", tags: str = 
     # 5. 点"下一步"
     next_btn = await page.query_selector("button:has-text('下一步')")
     if not next_btn:
-        return "找不到"下一步"按钮，图片可能还没生成完，请在浏览器里手动操作。"
+        return '找不到下一步按钮，图片可能还没生成完，请在浏览器里手动操作。'
     await next_btn.click()
     await page.wait_for_timeout(2000)
 
