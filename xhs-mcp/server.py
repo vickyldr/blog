@@ -29,11 +29,11 @@ async def get_page():
     _browser = await _pw.chromium.launch(
         headless=False,
         slow_mo=50,
-        args=["--start-maximized"]
+        args=["--window-size=1920,1080"]
     )
     _ctx = await _browser.new_context(
         user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-        no_viewport=True
+        viewport={"width": 1920, "height": 1080}
     )
 
     if COOKIES_FILE.exists():
@@ -41,6 +41,18 @@ async def get_page():
         await _ctx.add_cookies(cookies)
 
     _page = await _ctx.new_page()
+
+    # 用CDP把窗口最大化
+    try:
+        cdp = await _ctx.new_cdp_session(_page)
+        window_info = await cdp.send("Browser.getWindowForTarget")
+        await cdp.send("Browser.setWindowBounds", {
+            "windowId": window_info["windowId"],
+            "bounds": {"windowState": "maximized"}
+        })
+    except Exception:
+        pass
+
     return _page
 
 
