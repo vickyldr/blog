@@ -56,15 +56,20 @@ async def get_page():
     return _page
 
 
-async def js_click(page, locator):
-    """用JS把元素滚到中间，然后按坐标点击，绕过viewport检查。"""
-    await locator.evaluate("el => el.scrollIntoView({block: 'center', behavior: 'instant'})")
-    await page.wait_for_timeout(300)
-    bbox = await locator.bounding_box()
-    if bbox:
-        await page.mouse.click(bbox['x'] + bbox['width'] / 2, bbox['y'] + bbox['height'] / 2)
-    else:
-        await locator.click(force=True)
+async def dom_click(page, text: str) -> bool:
+    """用JavaScript直接在DOM上触发click，完全不依赖viewport位置。"""
+    return await page.evaluate(f"""
+        () => {{
+            const result = document.evaluate(
+                "//*[normalize-space(text())='{text}']",
+                document, null,
+                XPathResult.FIRST_ORDERED_NODE_TYPE, null
+            );
+            const el = result.singleNodeValue;
+            if (el) {{ el.click(); return true; }}
+            return false;
+        }}
+    """)
 
 
 async def save_cookies():
@@ -278,16 +283,13 @@ async def xhs_post(title: str, content: str, style: str = "基础", tags: str = 
     await page.wait_for_timeout(2500)
 
     # 1. 先点"上传图文"tab
-    tab = page.get_by_text("上传图文", exact=True)
-    if await tab.count() > 0:
-        await js_click(page, tab.first)
-        await page.wait_for_timeout(1500)
+    await dom_click(page, "上传图文")
+    await page.wait_for_timeout(1500)
 
     # 2. 点"文字配图"按钮
-    text_img_btn = page.get_by_text("文字配图", exact=True)
-    if await text_img_btn.count() == 0:
+    clicked = await dom_click(page, "文字配图")
+    if not clicked:
         return '找不到文字配图按钮，可能还没登录创作者平台（先调用 xhs_login_creator）。'
-    await js_click(page, text_img_btn.first)
     await page.wait_for_timeout(1500)
 
     # 2. 填写文字内容
@@ -304,20 +306,17 @@ async def xhs_post(title: str, content: str, style: str = "基础", tags: str = 
     gen_btn = page.get_by_text("生成图片", exact=True)
     if await gen_btn.count() == 0:
         return '找不到生成图片按钮。'
-    await js_click(page, gen_btn.first)
+    await dom_click(page, "生成图片")
     await page.wait_for_timeout(5000)
 
     # 4. 选择卡片样式
-    style_card = page.get_by_text(style, exact=True)
-    if await style_card.count() > 0:
-        await js_click(page, style_card.first)
-        await page.wait_for_timeout(800)
+    await dom_click(page, style)
+    await page.wait_for_timeout(800)
 
     # 5. 点"下一步"
-    next_btn = page.get_by_text("下一步", exact=True)
-    if await next_btn.count() == 0:
+    clicked = await dom_click(page, "下一步")
+    if not clicked:
         return '找不到下一步按钮，图片可能还没生成完，请在浏览器里手动操作。'
-    await js_click(page, next_btn.first)
     await page.wait_for_timeout(2000)
 
     # 6. 填标题
@@ -345,9 +344,7 @@ async def xhs_post(title: str, content: str, style: str = "基础", tags: str = 
                         await page.wait_for_timeout(500)
 
     # 8. 点"发布"
-    publish_btn = page.get_by_text("发布", exact=True)
-    if await publish_btn.count() > 0:
-        await js_click(page, publish_btn.first)
+    if await dom_click(page, "发布"):
         await page.wait_for_timeout(2000)
         await save_cookies()
         return f"发布成功！标题：{title}，样式：{style}" + (f"，标签：{tags}" if tags else "")
