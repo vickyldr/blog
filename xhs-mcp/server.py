@@ -237,29 +237,39 @@ async def xhs_comment(url: str, text: str) -> str:
 
 
 @mcp.tool()
-async def xhs_post(title: str, content: str) -> str:
-    """在小红书发布一篇文字笔记。会打开创作者后台，填好内容后需要你在浏览器里手动点发布。"""
+async def xhs_post(title: str, content: str, image_paths: str = "") -> str:
+    """在小红书发布图文笔记。image_paths 填本地图片路径，多张用英文逗号分隔，例如 C:\\图片1.jpg,C:\\图片2.jpg。至少传一张图片，否则发布按钮不可用。填好内容后需要在浏览器里手动点发布。"""
     page = await get_page()
     await page.goto("https://creator.xiaohongshu.com/publish/publish")
     await page.wait_for_load_state("networkidle", timeout=15000)
     await page.wait_for_timeout(2000)
 
-    text_tab = await page.query_selector("[class*='text-tab'], [data-type='text']")
-    if text_tab:
-        await text_tab.click()
-        await page.wait_for_timeout(800)
+    # 上传图片
+    if image_paths:
+        paths = [p.strip() for p in image_paths.split(",") if p.strip()]
+        file_input = await page.query_selector("input[type='file']")
+        if file_input and paths:
+            await file_input.set_input_files(paths)
+            await page.wait_for_timeout(3000)
+        else:
+            return "找不到图片上传按钮，页面可能还没加载好，稍后再试。"
+    else:
+        return "小红书图文帖子至少需要一张图片，请提供 image_paths 参数，例如：C:\\Users\\xy\\Pictures\\photo.jpg"
 
-    title_inp = await page.query_selector("input[placeholder*='标题'], input[placeholder*='title']")
+    # 填标题
+    title_inp = await page.query_selector("input[placeholder*='标题']")
     if title_inp:
         await title_inp.fill(title)
+        await page.wait_for_timeout(300)
 
+    # 填正文
     content_inp = await page.query_selector("[placeholder*='正文'], [contenteditable='true']")
     if content_inp:
         await content_inp.click()
         await content_inp.type(content, delay=20)
 
     await save_cookies()
-    return f"标题和正文已填好（标题：{title}），请在浏览器里确认内容后手动点发布按钮。"
+    return f"图片已上传，标题和正文已填好（标题：{title}）。请在浏览器里检查内容后手动点发布按钮。"
 
 
 if __name__ == "__main__":
