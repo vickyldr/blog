@@ -237,24 +237,12 @@ async def xhs_comment(url: str, text: str) -> str:
 
 
 @mcp.tool()
-async def xhs_post(title: str, content: str, image_paths: str = "") -> str:
-    """在小红书发布图文笔记。image_paths 填本地图片路径，多张用英文逗号分隔，例如 C:\\图片1.jpg,C:\\图片2.jpg。至少传一张图片，否则发布按钮不可用。填好内容后需要在浏览器里手动点发布。"""
+async def xhs_post(title: str, content: str) -> str:
+    """在小红书发布笔记。会自动填好标题和正文，并尝试点击"文字转图片"按钮生成封面图，生成后你在浏览器里手动点发布即可。"""
     page = await get_page()
     await page.goto("https://creator.xiaohongshu.com/publish/publish")
     await page.wait_for_load_state("networkidle", timeout=15000)
     await page.wait_for_timeout(2000)
-
-    # 上传图片
-    if image_paths:
-        paths = [p.strip() for p in image_paths.split(",") if p.strip()]
-        file_input = await page.query_selector("input[type='file']")
-        if file_input and paths:
-            await file_input.set_input_files(paths)
-            await page.wait_for_timeout(3000)
-        else:
-            return "找不到图片上传按钮，页面可能还没加载好，稍后再试。"
-    else:
-        return "小红书图文帖子至少需要一张图片，请提供 image_paths 参数，例如：C:\\Users\\xy\\Pictures\\photo.jpg"
 
     # 填标题
     title_inp = await page.query_selector("input[placeholder*='标题']")
@@ -267,9 +255,22 @@ async def xhs_post(title: str, content: str, image_paths: str = "") -> str:
     if content_inp:
         await content_inp.click()
         await content_inp.type(content, delay=20)
+        await page.wait_for_timeout(500)
+
+    # 尝试点击"文字转图片"按钮
+    text_to_img = await page.query_selector(
+        "button:has-text('文字转图片'), "
+        "[class*='text-to-image'], "
+        "span:has-text('文字转图片')"
+    )
+    if text_to_img:
+        await text_to_img.click()
+        await page.wait_for_timeout(3000)
+        await save_cookies()
+        return f"标题和正文已填好，已点击文字转图片（标题：{title}）。请在浏览器里确认后手动点发布。"
 
     await save_cookies()
-    return f"图片已上传，标题和正文已填好（标题：{title}）。请在浏览器里检查内容后手动点发布按钮。"
+    return f"标题和正文已填好（标题：{title}）。没找到文字转图片按钮，请在浏览器里手动点一下，再点发布。"
 
 
 if __name__ == "__main__":
