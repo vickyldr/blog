@@ -54,8 +54,16 @@ async def xhs_login() -> str:
 
 
 @mcp.tool()
+async def xhs_login_creator() -> str:
+    """打开小红书创作者平台，等你在浏览器里登录。登录完成后调用 xhs_save_login。发帖前必须先调用这个。"""
+    page = await get_page()
+    await page.goto("https://creator.xiaohongshu.com")
+    return "浏览器已打开创作者平台，请手动登录。登录完成后调用 xhs_save_login 保存状态。"
+
+
+@mcp.tool()
 async def xhs_save_login() -> str:
-    """登录完成后调用，把登录状态保存到本地，下次启动不用重新登录。"""
+    """登录完成后调用，把登录状态（包括创作者平台）保存到本地，下次启动不用重新登录。"""
     await save_cookies()
     return "登录状态已保存。"
 
