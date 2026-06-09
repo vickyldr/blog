@@ -238,49 +238,60 @@ async def xhs_comment(url: str, text: str) -> str:
 
 @mcp.tool()
 async def xhs_post(title: str, content: str) -> str:
-    """在小红书发布笔记。会自动填好标题和正文，并尝试点击"文字转图片"按钮生成封面图，生成后你在浏览器里手动点发布即可。"""
+    """在小红书发布图文笔记（文字转图片）。全自动：文字配图→生成图片→选样式→填标题→发布。"""
     page = await get_page()
     await page.goto("https://creator.xiaohongshu.com/publish/publish")
     await page.wait_for_load_state("networkidle", timeout=15000)
     await page.wait_for_timeout(2000)
 
-    # 填标题
-    title_inp = await page.query_selector("input[placeholder*='标题']")
-    if title_inp:
-        await title_inp.fill(title)
-        await page.wait_for_timeout(300)
+    # 1. 点"文字配图"按钮
+    text_img_btn = await page.query_selector("button:has-text('文字配图'), span:has-text('文字配图')")
+    if not text_img_btn:
+        return "找不到"文字配图"按钮，可能还没登录创作者平台（先调用 xhs_login_creator）。"
+    await text_img_btn.click()
+    await page.wait_for_timeout(1500)
 
-    # 填正文
-    content_inp = await page.query_selector("[placeholder*='正文'], [contenteditable='true']")
-    if content_inp:
-        await content_inp.click()
-        await content_inp.type(content, delay=20)
+    # 2. 填写文字内容（"真诚分享经验或资讯..."那个框）
+    content_area = await page.query_selector(
+        "textarea, div[contenteditable='true'], [placeholder*='真诚'], [placeholder*='分享']"
+    )
+    if not content_area:
+        return "找不到文字输入框。"
+    await content_area.click()
+    await page.keyboard.type(content, delay=20)
+    await page.wait_for_timeout(500)
+
+    # 3. 点"生成图片"
+    gen_btn = await page.query_selector("button:has-text('生成图片')")
+    if not gen_btn:
+        return "找不到"生成图片"按钮。"
+    await gen_btn.click()
+    await page.wait_for_timeout(5000)
+
+    # 4. 点"下一步"（卡片样式选择页面）
+    next_btn = await page.query_selector("button:has-text('下一步')")
+    if not next_btn:
+        return "找不到"下一步"按钮，图片可能还没生成完，请在浏览器里手动点。"
+    await next_btn.click()
+    await page.wait_for_timeout(2000)
+
+    # 5. 填标题（"填写标题会有更多赞哦"那个框）
+    title_area = await page.query_selector("[placeholder*='标题']")
+    if title_area:
+        await title_area.click()
+        await page.keyboard.type(title, delay=20)
         await page.wait_for_timeout(500)
 
-    # 尝试点击"文字转图片"按钮
-    text_to_img = await page.query_selector(
-        "button:has-text('文字转图片'), "
-        "[class*='text-to-image'], "
-        "span:has-text('文字转图片')"
-    )
-    if text_to_img:
-        await text_to_img.click()
-        await page.wait_for_timeout(4000)
-
-    # 自动点发布
-    publish_btn = await page.query_selector(
-        "button:has-text('发布'), "
-        "[class*='publish-btn'], "
-        "button[class*='submit']"
-    )
+    # 6. 点"发布"
+    publish_btn = await page.query_selector("button:has-text('发布')")
     if publish_btn:
         await publish_btn.click()
         await page.wait_for_timeout(2000)
         await save_cookies()
-        return f"已发布！标题：{title}"
+        return f"发布成功！标题：{title}"
 
     await save_cookies()
-    return f"内容填好了但找不到发布按钮，请在浏览器里手动点一下发布。"
+    return f"内容和图片都填好了，但找不到发布按钮，请在浏览器里手动点发布。"
 
 
 if __name__ == "__main__":
