@@ -156,6 +156,16 @@ async def xhs_get_note(url: str) -> str:
     if await check_login(page):
         return "页面要求登录，请调用 xhs_login 重新登录，登完调 xhs_save_login 保存。"
 
+    app_only = await page.evaluate("""
+        () => {
+            const text = document.body.innerText || '';
+            return text.includes('打开App') || text.includes('下载App') || text.includes('在App中查看')
+                || text.includes('仅支持App') || text.includes('App查看') || text.includes('Open in App');
+        }
+    """)
+    if app_only:
+        return "这篇帖子仅限App查看，网页版被锁死了，换一个普通帖子试试。"
+
     try:
         await page.wait_for_selector(
             '#detail-title, [class*="note-content"], [class*="noteContent"], [class*="detail-content"]',
