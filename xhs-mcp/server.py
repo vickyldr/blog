@@ -4,12 +4,11 @@
 用 Playwright 控制浏览器，支持：搜索 / 看帖 / 点赞 / 收藏 / 评论 / 发帖
 """
 
-import json
 from pathlib import Path
 from mcp.server.fastmcp import FastMCP
 from playwright.async_api import async_playwright
 
-COOKIES_FILE = Path(__file__).parent / "xhs_cookies.json"
+STATE_FILE = Path(__file__).parent / "xhs_state.json"  # storage_state: cookies + localStorage
 XHS_URL = "https://www.xiaohongshu.com"
 
 mcp = FastMCP("小红书")
@@ -27,10 +26,9 @@ async def get_page():
     if _page and not _page.is_closed():
         return _page
 
-    # 2. context 还活着，只需在里面开新 page（同时补充一次 cookie，防止丢失）
+    # 2. context 还活着，只需在里面开新 page
     if _ctx:
         try:
-            await apply_saved_cookies()
             _page = await _ctx.new_page()
             return _page
         except Exception:
@@ -45,15 +43,16 @@ async def get_page():
         slow_mo=50,
         args=["--window-size=1920,1080"]
     )
-    _ctx = await _browser.new_context(
+
+    # storage_state 会同时恢复 cookies + localStorage + sessionStorage
+    ctx_kwargs = dict(
         user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-        viewport={"width": 1920, "height": 1080}
+        viewport={"width": 1920, "height": 1080},
     )
+    if STATE_FILE.exists():
+        ctx_kwargs["storage_state"] = str(STATE_FILE)
 
-    if COOKIES_FILE.exists():
-        cookies = json.loads(COOKIES_FILE.read_text(encoding="utf-8"))
-        await _ctx.add_cookies(cookies)
-
+    _ctx = await _browser.new_context(**ctx_kwargs)
     _page = await _ctx.new_page()
 
     try:
@@ -95,20 +94,10 @@ async def dom_click(page, text: str) -> bool:
     """)
 
 
-async def apply_saved_cookies():
-    """把本地 cookie 文件里的登录状态注入到当前 context。"""
-    if _ctx and COOKIES_FILE.exists():
-        try:
-            cookies = json.loads(COOKIES_FILE.read_text(encoding="utf-8"))
-            await _ctx.add_cookies(cookies)
-        except Exception:
-            pass
-
-
 async def save_cookies():
+    """保存完整的浏览器状态（cookies + localStorage + sessionStorage）。"""
     if _ctx:
-        cookies = await _ctx.cookies()
-        COOKIES_FILE.write_text(json.dumps(cookies, ensure_ascii=False), encoding="utf-8")
+        await _ctx.storage_state(path=str(STATE_FILE))
 
 
 @mcp.tool()
@@ -131,7 +120,7 @@ async def xhs_login_creator() -> str:
 async def xhs_save_login() -> str:
     """登录完成后调用，把登录状态（包括创作者平台）保存到本地，下次启动不用重新登录。"""
     await save_cookies()
-    return f"登录状态已保存。Cookie 文件路径：{COOKIES_FILE}  |  文件是否存在：{COOKIES_FILE.exists()}"
+    return f"登录状态已保存。State 文件路径：{STATE_FILE}  |  文件是否存在：{STATE_FILE.exists()}"
 
 
 @mcp.tool()
@@ -172,17 +161,14 @@ async def xhs_search(keyword: str) -> str:
 async def xhs_get_note(url: str) -> str:
     """获取一篇小红书笔记的标题、正文、作者、点赞数和前5条评论。"""
     page = await get_page()
-
-    # 导航前先确保 cookie 已注入，防止裸访问被踢到扫码页
-    cookie_status = f"Cookie 文件路径：{COOKIES_FILE}  |  文件是否存在：{COOKIES_FILE.exists()}"
-    await apply_saved_cookies()
+    state_status = f"[debug] State 文件：{STATE_FILE}  |  存在：{STATE_FILE.exists()}"
 
     await page.goto(url)
     await page.wait_for_load_state("networkidle", timeout=15000)
     await page.wait_for_timeout(3000)
 
     if await check_login(page):
-        return f"页面要求登录，请调用 xhs_login 重新登录，登完调 xhs_save_login 保存。\n[debug] {cookie_status}"
+        return f"页面要求登录，请调用 xhs_login 重新登录，登完调 xhs_save_login 保存。\n[debug] {state_status}"
 
     # 仅当页面没有帖子内容、且出现 App 跳转提示时，才认定为仅限App
     app_only = await page.evaluate("""
@@ -195,7 +181,7 @@ async def xhs_get_note(url: str) -> str:
         }
     """)
     if app_only:
-        return f"这篇帖子仅限App查看，网页版被锁死了，换一个普通帖子试试。\n[debug] {cookie_status}"
+        return f"这篇帖子仅限App查看，网页版被锁死了，换一个普通帖子试试。\n[debug] {state_status}"
 
     try:
         await page.wait_for_selector(
@@ -240,7 +226,7 @@ async def xhs_get_note(url: str) -> str:
 
     if not data.get('title') and not data.get('desc'):
         page_text = await page.evaluate("() => document.body.innerText?.slice(0, 800) || ''")
-        return f"无法解析帖子结构，页面原始内容（前800字）：\n{page_text}\n[debug] {cookie_status}"
+        return f"无法解析帖子结构，页面原始内容（前800字）：\n{page_text}\n[debug] {state_status}"
 
     lines = [
         f"标题：{data['title'] or '(无标题)'}",
