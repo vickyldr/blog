@@ -22,10 +22,23 @@ _page = None
 
 async def get_page():
     global _pw, _browser, _ctx, _page
+
+    # 1. 已有打开的 page，直接复用（同一个 context，session 不变）
     if _page and not _page.is_closed():
         return _page
 
-    _pw = await async_playwright().start()
+    # 2. context 还活着，只需在里面开新 page（保留 cookies/session）
+    if _ctx:
+        try:
+            _page = await _ctx.new_page()
+            return _page
+        except Exception:
+            pass
+
+    # 3. 完全重建：playwright → browser → context → page
+    if _pw is None:
+        _pw = await async_playwright().start()
+
     _browser = await _pw.chromium.launch(
         headless=False,
         slow_mo=50,
@@ -42,7 +55,6 @@ async def get_page():
 
     _page = await _ctx.new_page()
 
-    # 用CDP把窗口最大化
     try:
         cdp = await _ctx.new_cdp_session(_page)
         window_info = await cdp.send("Browser.getWindowForTarget")
