@@ -131,7 +131,7 @@ async def xhs_login_creator() -> str:
 async def xhs_save_login() -> str:
     """登录完成后调用，把登录状态（包括创作者平台）保存到本地，下次启动不用重新登录。"""
     await save_cookies()
-    return "登录状态已保存。"
+    return f"登录状态已保存。Cookie 文件路径：{COOKIES_FILE}  |  文件是否存在：{COOKIES_FILE.exists()}"
 
 
 @mcp.tool()
@@ -174,6 +174,7 @@ async def xhs_get_note(url: str) -> str:
     page = await get_page()
 
     # 导航前先确保 cookie 已注入，防止裸访问被踢到扫码页
+    cookie_status = f"Cookie 文件路径：{COOKIES_FILE}  |  文件是否存在：{COOKIES_FILE.exists()}"
     await apply_saved_cookies()
 
     await page.goto(url)
@@ -181,7 +182,7 @@ async def xhs_get_note(url: str) -> str:
     await page.wait_for_timeout(3000)
 
     if await check_login(page):
-        return "页面要求登录，请调用 xhs_login 重新登录，登完调 xhs_save_login 保存。"
+        return f"页面要求登录，请调用 xhs_login 重新登录，登完调 xhs_save_login 保存。\n[debug] {cookie_status}"
 
     # 仅当页面没有帖子内容、且出现 App 跳转提示时，才认定为仅限App
     app_only = await page.evaluate("""
@@ -194,7 +195,7 @@ async def xhs_get_note(url: str) -> str:
         }
     """)
     if app_only:
-        return "这篇帖子仅限App查看，网页版被锁死了，换一个普通帖子试试。"
+        return f"这篇帖子仅限App查看，网页版被锁死了，换一个普通帖子试试。\n[debug] {cookie_status}"
 
     try:
         await page.wait_for_selector(
@@ -239,7 +240,7 @@ async def xhs_get_note(url: str) -> str:
 
     if not data.get('title') and not data.get('desc'):
         page_text = await page.evaluate("() => document.body.innerText?.slice(0, 800) || ''")
-        return f"无法解析帖子结构，页面原始内容（前800字）：\n{page_text}"
+        return f"无法解析帖子结构，页面原始内容（前800字）：\n{page_text}\n[debug] {cookie_status}"
 
     lines = [
         f"标题：{data['title'] or '(无标题)'}",
