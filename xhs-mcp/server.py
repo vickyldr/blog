@@ -237,8 +237,13 @@ async def xhs_comment(url: str, text: str) -> str:
 
 
 @mcp.tool()
-async def xhs_post(title: str, content: str) -> str:
-    """在小红书发布图文笔记（文字转图片）。全自动：文字配图→生成图片→选样式→填标题→发布。"""
+async def xhs_post(title: str, content: str, style: str = "基础", tags: str = "") -> str:
+    """在小红书发布图文笔记（文字转图片）。
+    - title: 标题
+    - content: 生成图片的文字内容
+    - style: 卡片样式，可选：基础 / 插图 / 美漫 / 备忘 / 边框 / 清新（默认基础）
+    - tags: 话题标签，逗号分隔，如 日常,分享,生活
+    """
     page = await get_page()
     await page.goto("https://creator.xiaohongshu.com/publish/publish")
     await page.wait_for_load_state("networkidle", timeout=15000)
@@ -251,7 +256,7 @@ async def xhs_post(title: str, content: str) -> str:
     await text_img_btn.click()
     await page.wait_for_timeout(1500)
 
-    # 2. 填写文字内容（"真诚分享经验或资讯..."那个框）
+    # 2. 填写文字内容
     content_area = await page.query_selector(
         "textarea, div[contenteditable='true'], [placeholder*='真诚'], [placeholder*='分享']"
     )
@@ -268,27 +273,51 @@ async def xhs_post(title: str, content: str) -> str:
     await gen_btn.click()
     await page.wait_for_timeout(5000)
 
-    # 4. 点"下一步"（卡片样式选择页面）
+    # 4. 选择卡片样式（基础/插图/美漫/备忘/边框/清新）
+    style_card = await page.query_selector(f"div:has-text('{style}') img, [class*='card']:has-text('{style}')")
+    if style_card:
+        await style_card.click()
+        await page.wait_for_timeout(800)
+    # 没找到就用默认已选中的样式
+
+    # 5. 点"下一步"
     next_btn = await page.query_selector("button:has-text('下一步')")
     if not next_btn:
-        return "找不到"下一步"按钮，图片可能还没生成完，请在浏览器里手动点。"
+        return "找不到"下一步"按钮，图片可能还没生成完，请在浏览器里手动操作。"
     await next_btn.click()
     await page.wait_for_timeout(2000)
 
-    # 5. 填标题（"填写标题会有更多赞哦"那个框）
+    # 6. 填标题
     title_area = await page.query_selector("[placeholder*='标题']")
     if title_area:
         await title_area.click()
         await page.keyboard.type(title, delay=20)
         await page.wait_for_timeout(500)
 
-    # 6. 点"发布"
+    # 7. 添加话题标签
+    if tags:
+        tag_list = [t.strip() for t in tags.split(",") if t.strip()]
+        topic_btn = await page.query_selector("button:has-text('话题'), [class*='topic']")
+        if topic_btn:
+            for tag in tag_list:
+                await topic_btn.click()
+                await page.wait_for_timeout(800)
+                tag_input = await page.query_selector("[placeholder*='搜索话题'], [placeholder*='话题']")
+                if tag_input:
+                    await tag_input.type(tag, delay=30)
+                    await page.wait_for_timeout(1000)
+                    first_result = await page.query_selector("[class*='topic-item'], [class*='search-result'] li")
+                    if first_result:
+                        await first_result.click()
+                        await page.wait_for_timeout(500)
+
+    # 8. 点"发布"
     publish_btn = await page.query_selector("button:has-text('发布')")
     if publish_btn:
         await publish_btn.click()
         await page.wait_for_timeout(2000)
         await save_cookies()
-        return f"发布成功！标题：{title}"
+        return f"发布成功！标题：{title}，样式：{style}" + (f"，标签：{tags}" if tags else "")
 
     await save_cookies()
     return f"内容和图片都填好了，但找不到发布按钮，请在浏览器里手动点发布。"
