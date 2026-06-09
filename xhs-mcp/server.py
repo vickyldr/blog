@@ -265,12 +265,22 @@ async def xhs_post(title: str, content: str) -> str:
     )
     if text_to_img:
         await text_to_img.click()
-        await page.wait_for_timeout(3000)
+        await page.wait_for_timeout(4000)
+
+    # 自动点发布
+    publish_btn = await page.query_selector(
+        "button:has-text('发布'), "
+        "[class*='publish-btn'], "
+        "button[class*='submit']"
+    )
+    if publish_btn:
+        await publish_btn.click()
+        await page.wait_for_timeout(2000)
         await save_cookies()
-        return f"标题和正文已填好，已点击文字转图片（标题：{title}）。请在浏览器里确认后手动点发布。"
+        return f"已发布！标题：{title}"
 
     await save_cookies()
-    return f"标题和正文已填好（标题：{title}）。没找到文字转图片按钮，请在浏览器里手动点一下，再点发布。"
+    return f"内容填好了但找不到发布按钮，请在浏览器里手动点一下发布。"
 
 
 if __name__ == "__main__":
