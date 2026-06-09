@@ -246,14 +246,20 @@ async def xhs_post(title: str, content: str, style: str = "基础", tags: str = 
     """
     page = await get_page()
     await page.goto("https://creator.xiaohongshu.com/publish/publish")
-    await page.wait_for_load_state("networkidle", timeout=15000)
-    await page.wait_for_timeout(2000)
+    await page.wait_for_load_state("networkidle", timeout=20000)
+    await page.wait_for_timeout(2500)
 
-    # 1. 点"文字配图"按钮
-    text_img_btn = await page.query_selector("button:has-text('文字配图'), span:has-text('文字配图')")
-    if not text_img_btn:
+    # 1. 先点"上传图文"tab
+    tab = page.get_by_text("上传图文", exact=True)
+    if await tab.count() > 0:
+        await tab.first.click()
+        await page.wait_for_timeout(1500)
+
+    # 2. 点"文字配图"按钮
+    text_img_btn = page.get_by_text("文字配图", exact=True)
+    if await text_img_btn.count() == 0:
         return '找不到文字配图按钮，可能还没登录创作者平台（先调用 xhs_login_creator）。'
-    await text_img_btn.click()
+    await text_img_btn.first.click()
     await page.wait_for_timeout(1500)
 
     # 2. 填写文字内容
@@ -267,24 +273,23 @@ async def xhs_post(title: str, content: str, style: str = "基础", tags: str = 
     await page.wait_for_timeout(500)
 
     # 3. 点"生成图片"
-    gen_btn = await page.query_selector("button:has-text('生成图片')")
-    if not gen_btn:
+    gen_btn = page.get_by_text("生成图片", exact=True)
+    if await gen_btn.count() == 0:
         return '找不到生成图片按钮。'
-    await gen_btn.click()
+    await gen_btn.first.click()
     await page.wait_for_timeout(5000)
 
-    # 4. 选择卡片样式（基础/插图/美漫/备忘/边框/清新）
-    style_card = await page.query_selector(f"div:has-text('{style}') img, [class*='card']:has-text('{style}')")
-    if style_card:
-        await style_card.click()
+    # 4. 选择卡片样式
+    style_card = page.get_by_text(style, exact=True)
+    if await style_card.count() > 0:
+        await style_card.first.click()
         await page.wait_for_timeout(800)
-    # 没找到就用默认已选中的样式
 
     # 5. 点"下一步"
-    next_btn = await page.query_selector("button:has-text('下一步')")
-    if not next_btn:
+    next_btn = page.get_by_text("下一步", exact=True)
+    if await next_btn.count() == 0:
         return '找不到下一步按钮，图片可能还没生成完，请在浏览器里手动操作。'
-    await next_btn.click()
+    await next_btn.first.click()
     await page.wait_for_timeout(2000)
 
     # 6. 填标题
@@ -297,30 +302,30 @@ async def xhs_post(title: str, content: str, style: str = "基础", tags: str = 
     # 7. 添加话题标签
     if tags:
         tag_list = [t.strip() for t in tags.split(",") if t.strip()]
-        topic_btn = await page.query_selector("button:has-text('话题'), [class*='topic']")
-        if topic_btn:
-            for tag in tag_list:
-                await topic_btn.click()
+        for tag in tag_list:
+            topic_btn = page.get_by_text("话题", exact=True)
+            if await topic_btn.count() > 0:
+                await topic_btn.first.click()
                 await page.wait_for_timeout(800)
-                tag_input = await page.query_selector("[placeholder*='搜索话题'], [placeholder*='话题']")
+                tag_input = await page.query_selector("[placeholder*='搜索'], [placeholder*='话题']")
                 if tag_input:
                     await tag_input.type(tag, delay=30)
                     await page.wait_for_timeout(1000)
-                    first_result = await page.query_selector("[class*='topic-item'], [class*='search-result'] li")
+                    first_result = await page.query_selector("[class*='topic-item'], [class*='result'] li")
                     if first_result:
                         await first_result.click()
                         await page.wait_for_timeout(500)
 
     # 8. 点"发布"
-    publish_btn = await page.query_selector("button:has-text('发布')")
-    if publish_btn:
-        await publish_btn.click()
+    publish_btn = page.get_by_text("发布", exact=True)
+    if await publish_btn.count() > 0:
+        await publish_btn.first.click()
         await page.wait_for_timeout(2000)
         await save_cookies()
         return f"发布成功！标题：{title}，样式：{style}" + (f"，标签：{tags}" if tags else "")
 
     await save_cookies()
-    return f"内容和图片都填好了，但找不到发布按钮，请在浏览器里手动点发布。"
+    return "内容和图片都填好了，但找不到发布按钮，请在浏览器里手动点发布。"
 
 
 if __name__ == "__main__":
