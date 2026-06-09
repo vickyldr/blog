@@ -27,9 +27,10 @@ async def get_page():
     if _page and not _page.is_closed():
         return _page
 
-    # 2. context 还活着，只需在里面开新 page（保留 cookies/session）
+    # 2. context 还活着，只需在里面开新 page（同时补充一次 cookie，防止丢失）
     if _ctx:
         try:
+            await apply_saved_cookies()
             _page = await _ctx.new_page()
             return _page
         except Exception:
@@ -92,6 +93,16 @@ async def dom_click(page, text: str) -> bool:
             return false;
         }}
     """)
+
+
+async def apply_saved_cookies():
+    """把本地 cookie 文件里的登录状态注入到当前 context。"""
+    if _ctx and COOKIES_FILE.exists():
+        try:
+            cookies = json.loads(COOKIES_FILE.read_text(encoding="utf-8"))
+            await _ctx.add_cookies(cookies)
+        except Exception:
+            pass
 
 
 async def save_cookies():
@@ -161,6 +172,10 @@ async def xhs_search(keyword: str) -> str:
 async def xhs_get_note(url: str) -> str:
     """获取一篇小红书笔记的标题、正文、作者、点赞数和前5条评论。"""
     page = await get_page()
+
+    # 导航前先确保 cookie 已注入，防止裸访问被踢到扫码页
+    await apply_saved_cookies()
+
     await page.goto(url)
     await page.wait_for_load_state("networkidle", timeout=15000)
     await page.wait_for_timeout(3000)
@@ -168,11 +183,14 @@ async def xhs_get_note(url: str) -> str:
     if await check_login(page):
         return "页面要求登录，请调用 xhs_login 重新登录，登完调 xhs_save_login 保存。"
 
+    # 仅当页面没有帖子内容、且出现 App 跳转提示时，才认定为仅限App
     app_only = await page.evaluate("""
         () => {
-            const text = document.body.innerText || '';
-            return text.includes('打开App') || text.includes('下载App') || text.includes('在App中查看')
-                || text.includes('仅支持App') || text.includes('App查看') || text.includes('Open in App');
+            const body = document.body.innerText || '';
+            const hasAppPrompt = body.includes('仅支持App查看') || body.includes('请在App内查看')
+                || body.includes('Open in App') || document.querySelector('[class*="openApp"], [class*="open-app"]') !== null;
+            const hasContent = document.querySelector('#detail-title, #detail-desc, [class*="noteContent"]') !== null;
+            return hasAppPrompt && !hasContent;
         }
     """)
     if app_only:
